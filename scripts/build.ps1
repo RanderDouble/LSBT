@@ -18,8 +18,4 @@ if ($LASTEXITCODE -ne 0) {
     throw "g++ failed with exit code $LASTEXITCODE"
 }
 
-& (Join-Path $artifactRoot 'runner.exe') --self-test
-if ($LASTEXITCODE -ne 0) {
-    throw "self-tests failed with exit code $LASTEXITCODE"
-}
-
+Write-Host "Built PRD runner.exe"

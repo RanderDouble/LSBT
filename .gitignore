@@ -1,0 +1,14 @@
+# Local build outputs
+*.exe
+*.o
+*.obj
+
+# Editor and Python cache files
+.vscode/
+__pycache__/
+*.pyc
+
+# Local experiment outputs and helper binaries
+results/*
+!results/README.md
+tools/hierarchy_trace_convert_wsl

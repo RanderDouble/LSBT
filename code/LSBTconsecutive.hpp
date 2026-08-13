@@ -36,15 +36,30 @@ class LSBTconsecutive {
       double min_history_retention = kDefaultMinHistoryRetention,
       double max_history_retention = kDefaultMaxHistoryRetention,
       double gain_scale = kDefaultGainScale,
-      double ghost_size_ratio = kDefaultGhostSizeRatio)
+      double ghost_size_ratio = kDefaultGhostSizeRatio,
+      bool enable_renewal_lease = false,
+      std::uint32_t lease_base_turnovers = 2,
+      std::uint32_t lease_step_turnovers = 2,
+      std::uint32_t lease_max_turnovers = 8,
+      bool neutral_depth_gain = false)
       : capacity_(capacity),
         max_depth_(std::max(1, max_depth)),
         ghost_capacity_(ComputeGhostCapacity(capacity, ghost_size_ratio)),
         decay_(ClampHistoryRetention(history_retention, min_history_retention,
                                      max_history_retention)),
         log_decay_(std::log(decay_)),
+        depth_bucket_stride_(max_depth_ <= 1
+                                 ? 0.0
+                                 : 1.0 / static_cast<double>(max_depth_ - 1)),
         gain_scale_(std::max(1e-12, gain_scale)),
-        protect_scan_budget_(std::max(1, protect_scan_budget)) {
+        protect_scan_budget_(std::max(1, protect_scan_budget)),
+        enable_renewal_lease_(enable_renewal_lease),
+        lease_base_turnovers_(std::max<std::uint32_t>(1,
+                                                      lease_base_turnovers)),
+        lease_step_turnovers_(lease_step_turnovers),
+        lease_max_turnovers_(std::max(lease_base_turnovers_,
+                                      lease_max_turnovers)),
+        neutral_depth_gain_(neutral_depth_gain) {
     const std::size_t reserve_size =
         capacity_ > std::numeric_limits<std::size_t>::max() - ghost_capacity_
             ? std::numeric_limits<std::size_t>::max()
@@ -63,6 +78,9 @@ class LSBTconsecutive {
       InsertGhost(key_id, state);
     }
     ObserveAccess(key_id, state, depth, gain_multiplier);
+    if (hit) {
+      RenewLease(key_id, state);
+    }
     return hit;
   }
 
@@ -100,6 +118,7 @@ class LSBTconsecutive {
     state.protection_epoch = 0;
     ++resident_size_;
     PushHeapEntry(key_id, state);
+    InitializeLease(key_id, state);
     return true;
   }
 
@@ -142,6 +161,17 @@ class LSBTconsecutive {
 
   const DebugCounters& counters() const noexcept { return counters_; }
 
+  void SetDepthBucketStride(double stride) {
+    depth_bucket_stride_ = std::max(0.0, stride);
+  }
+
+  // Uses exact subtree coverage for a complete b-ary tree. With the trace's
+  // one-based depth convention, depth 1 is the root and has coverage 1.
+  void SetCoverageBranchingFactor(double branching_factor) {
+    coverage_branching_factor_ = std::max(1.0, branching_factor);
+    use_coverage_gain_ = coverage_branching_factor_ > 1.0;
+  }
+
   // Test/diagnostic hook: returns exact heat at the current block version.
   double DebugCurrentHeat(std::uint32_t key_id) const {
     const auto it = states_.find(key_id);
@@ -157,8 +187,11 @@ class LSBTconsecutive {
   struct State {
     double log_normalized_heat = NegativeInfinity();
     std::uint64_t heap_generation = 0;
+    std::uint64_t lease_generation = 0;
     std::uint32_t ghost_generation = 0;
     std::uint16_t protection_epoch = 0;
+    std::uint64_t last_proof_version = 0;
+    std::uint8_t proof_count = 0;
     bool resident = false;
     bool in_ghost = false;
   };
@@ -176,6 +209,21 @@ class LSBTconsecutive {
         return lhs.log_normalized_heat > rhs.log_normalized_heat;
       }
       return lhs.sequence > rhs.sequence;
+    }
+  };
+
+  struct LeaseEntry {
+    std::uint64_t expiry_version = 0;
+    std::uint64_t generation = 0;
+    std::uint32_t key_id = 0;
+  };
+
+  struct LeaseGreater {
+    bool operator()(const LeaseEntry& lhs, const LeaseEntry& rhs) const {
+      if (lhs.expiry_version != rhs.expiry_version) {
+        return lhs.expiry_version > rhs.expiry_version;
+      }
+      return lhs.key_id > rhs.key_id;
     }
   };
 
@@ -237,9 +285,16 @@ class LSBTconsecutive {
   }
 
   double DepthWeight(int depth) const {
+    if (neutral_depth_gain_) {
+      return 1.0;
+    }
     const int clipped_depth = std::clamp(depth, 1, max_depth_);
-    return std::pow(
-        decay_, NormalizeDepth(static_cast<double>(clipped_depth)));
+    if (use_coverage_gain_) {
+      return std::pow(coverage_branching_factor_,
+                      -static_cast<double>(clipped_depth - 1));
+    }
+    return std::pow(decay_, depth_bucket_stride_ *
+                                static_cast<double>(clipped_depth - 1));
   }
 
   void ObserveAccess(std::uint32_t key_id, State& state, int depth,
@@ -265,6 +320,45 @@ class LSBTconsecutive {
                          state.heap_generation, key_id});
   }
 
+  std::uint64_t LeaseDuration(const State& state) const {
+    const std::uint64_t expanded =
+        static_cast<std::uint64_t>(lease_base_turnovers_) +
+        static_cast<std::uint64_t>(state.proof_count) *
+            lease_step_turnovers_;
+    return std::min<std::uint64_t>(lease_max_turnovers_, expanded);
+  }
+
+  void ScheduleLease(std::uint32_t key_id, State& state) {
+    if (!enable_renewal_lease_) {
+      return;
+    }
+    ++state.lease_generation;
+    lease_heap_.push(LeaseEntry{
+        current_version_ + LeaseDuration(state), state.lease_generation,
+        key_id});
+  }
+
+  void InitializeLease(std::uint32_t key_id, State& state) {
+    if (!enable_renewal_lease_) {
+      return;
+    }
+    state.proof_count = 0;
+    state.last_proof_version = current_version_;
+    ScheduleLease(key_id, state);
+  }
+
+  void RenewLease(std::uint32_t key_id, State& state) {
+    if (!enable_renewal_lease_) {
+      return;
+    }
+    if (current_version_ > state.last_proof_version) {
+      state.last_proof_version = current_version_;
+      state.proof_count = static_cast<std::uint8_t>(std::min<int>(
+          3, static_cast<int>(state.proof_count) + 1));
+    }
+    ScheduleLease(key_id, state);
+  }
+
   bool IsCurrent(const HeapEntry& entry) const {
     const auto it = states_.find(entry.key_id);
     return it != states_.end() && it->second.resident &&
@@ -276,7 +370,58 @@ class LSBTconsecutive {
            state.protection_epoch == active_protection_epoch_;
   }
 
+  bool IsCurrentLease(const LeaseEntry& entry) const {
+    const auto it = states_.find(entry.key_id);
+    return it != states_.end() && it->second.resident &&
+           it->second.lease_generation == entry.generation;
+  }
+
+  void FinalizeEviction(std::uint32_t key_id, State& state) {
+    state.resident = false;
+    state.protection_epoch = 0;
+    --resident_size_;
+    pending_evicted_keys_.push_back(key_id);
+    ++counters_.evictions;
+    InsertGhost(key_id, state);
+    if (ghost_capacity_ == 0) {
+      states_.erase(key_id);
+    }
+  }
+
+  bool EvictExpiredLease() {
+    if (!enable_renewal_lease_) {
+      return false;
+    }
+    std::vector<LeaseEntry> deferred;
+    while (!lease_heap_.empty() &&
+           lease_heap_.top().expiry_version <= current_version_) {
+      const LeaseEntry entry = lease_heap_.top();
+      lease_heap_.pop();
+      if (!IsCurrentLease(entry)) {
+        continue;
+      }
+      State& state = states_.at(entry.key_id);
+      if (IsProtected(state)) {
+        ++counters_.protected_candidates;
+        deferred.push_back(entry);
+        continue;
+      }
+      for (const LeaseEntry& protected_entry : deferred) {
+        lease_heap_.push(protected_entry);
+      }
+      FinalizeEviction(entry.key_id, state);
+      return true;
+    }
+    for (const LeaseEntry& protected_entry : deferred) {
+      lease_heap_.push(protected_entry);
+    }
+    return false;
+  }
+
   bool EvictOne() {
+    if (EvictExpiredLease()) {
+      return true;
+    }
     std::vector<HeapEntry> protected_entries;
     protected_entries.reserve(static_cast<std::size_t>(protect_scan_budget_));
 
@@ -306,15 +451,7 @@ class LSBTconsecutive {
       for (const HeapEntry& entry : protected_entries) {
         heap_.push(entry);
       }
-      state.resident = false;
-      state.protection_epoch = 0;
-      --resident_size_;
-      pending_evicted_keys_.push_back(candidate.key_id);
-      ++counters_.evictions;
-      InsertGhost(candidate.key_id, state);
-      if (ghost_capacity_ == 0) {
-        states_.erase(candidate.key_id);
-      }
+      FinalizeEviction(candidate.key_id, state);
       return true;
     }
 
@@ -388,8 +525,16 @@ class LSBTconsecutive {
   std::size_t ghost_capacity_ = 0;
   double decay_ = 0.95;
   double log_decay_ = std::log(0.95);
+  double depth_bucket_stride_ = 0.0;
   double gain_scale_ = kDefaultGainScale;
   int protect_scan_budget_ = 16;
+  bool enable_renewal_lease_ = false;
+  std::uint32_t lease_base_turnovers_ = 2;
+  std::uint32_t lease_step_turnovers_ = 2;
+  std::uint32_t lease_max_turnovers_ = 8;
+  bool neutral_depth_gain_ = false;
+  bool use_coverage_gain_ = false;
+  double coverage_branching_factor_ = 1.0;
   std::uint64_t current_version_ = 1;
   std::uint64_t next_heap_sequence_ = 0;
   std::size_t resident_size_ = 0;
@@ -397,6 +542,8 @@ class LSBTconsecutive {
 
   std::unordered_map<std::uint32_t, State> states_;
   std::priority_queue<HeapEntry, std::vector<HeapEntry>, HeapGreater> heap_;
+  std::priority_queue<LeaseEntry, std::vector<LeaseEntry>, LeaseGreater>
+      lease_heap_;
   std::vector<GhostRecord> ghost_ring_;
   std::vector<std::uint32_t> pending_evicted_keys_;
   std::uint16_t active_protection_epoch_ = 0;

@@ -57,17 +57,28 @@ class LSBTdiscrete {
                                       double repeat_hit_gain_scale = 0.25,
                                       bool first_touch_per_block = true,
                                       double ghost_size_ratio =
-                                          kDefaultGhostSizeRatio)
+                                          kDefaultGhostSizeRatio,
+                                      int one_touch_lifetime = 0,
+                                      int burst_accesses = 1)
       : capacity_(capacity),
         max_depth_(std::max(1, max_depth)),
         ghost_capacity_(ComputeGhostCapacity(capacity, ghost_size_ratio)),
         bucket_count_(bucket_count_override > 0
                           ? bucket_count_override
-                          : ComputeBucketCount(capacity)),
+                          : one_touch_lifetime > 0
+                                ? ComputeCalibratedBucketCount(
+                                      history_retention,
+                                      min_history_retention,
+                                      max_history_retention,
+                                      one_touch_lifetime, burst_accesses)
+                                : ComputeBucketCount(capacity)),
         max_score_(bucket_count_ == 0 ? 0 : bucket_count_ - 1),
         bucket_bitmap_words_((bucket_count_ + 63) / 64),
         decay_(ClampHistoryRetention(history_retention, min_history_retention,
                                      max_history_retention)),
+        depth_bucket_stride_(max_depth_ <= 1
+                                 ? 0.0
+                                 : 1.0 / static_cast<double>(max_depth_ - 1)),
         gain_scale_(std::max(1e-12, gain_scale)),
         reference_gain_scale_(std::max(1e-12, reference_gain_scale)),
         reward_window_capacity_ratio_(
@@ -77,6 +88,12 @@ class LSBTdiscrete {
         reference_heat_(std::max(1e-12,
                                  reference_gain_scale_ /
                                      std::max(1.0 - decay_, 1e-9))),
+        minimum_heat_(one_touch_lifetime > 0
+                          ? gain_scale_ *
+                                std::pow(decay_, one_touch_lifetime)
+                          : reference_heat_ *
+                                std::pow(decay_,
+                                         static_cast<double>(max_score_))),
         rescue_limit_(rescue_limit),
         protect_scan_budget_(std::max(1, protect_scan_budget)),
         rotate_protected_candidates_(rotate_protected_candidates),
@@ -166,6 +183,11 @@ class LSBTdiscrete {
 
   void ClearDynamicEvictionScoreFn() { dynamic_eviction_score_fn_ = nullptr; }
 
+  void SetDepthBucketStride(double stride) {
+    depth_bucket_stride_ = std::max(0.0, stride);
+    BuildTables();
+  }
+
   void ClearProtectedKeys() noexcept { active_protection_epoch_ = 0; }
 
   void BeginProtectedKeyInstall() { active_protection_epoch_ = NextProtectionEpoch(); }
@@ -235,6 +257,24 @@ class LSBTdiscrete {
         1, static_cast<std::size_t>(std::llround(32.0 * std::log2(cap + 1.0))));
   }
 
+  static std::size_t ComputeCalibratedBucketCount(
+      double history_retention, double min_history_retention,
+      double max_history_retention, int one_touch_lifetime,
+      int burst_accesses) {
+    const double decay = ClampHistoryRetention(
+        history_retention, min_history_retention, max_history_retention);
+    const double headroom =
+        1.0 + static_cast<double>(std::max(1, burst_accesses) - 1) *
+                  (1.0 - decay);
+    const double heat_ratio =
+        headroom /
+        ((1.0 - decay) *
+         std::pow(decay, static_cast<double>(one_touch_lifetime)));
+    const double max_bucket =
+        std::ceil(std::log(heat_ratio) / std::log(1.0 / decay));
+    return static_cast<std::size_t>(std::max(0.0, max_bucket)) + 1;
+  }
+
   static std::size_t ComputeGhostCapacity(std::size_t capacity,
                                           double ghost_size_ratio) {
     if (capacity == 0 || !std::isfinite(ghost_size_ratio) ||
@@ -268,8 +308,8 @@ class LSBTdiscrete {
     representative_heat_lut_.resize(bucket_count_, 0.0);
     for (std::size_t bucket = 0; bucket < bucket_count_; ++bucket) {
       representative_heat_lut_[bucket] =
-          reference_heat_ *
-          std::pow(decay_, static_cast<double>(max_score_ - bucket));
+          minimum_heat_ *
+          std::pow(1.0 / decay_, static_cast<double>(bucket));
     }
 
     for (int depth = 1; depth <= max_depth_; ++depth) {
@@ -296,19 +336,19 @@ class LSBTdiscrete {
 
   double DepthWeight(int depth) const {
     const int clipped_depth = std::clamp(depth, 1, max_depth_);
-    return std::pow(decay_, NormalizeDepth(static_cast<double>(clipped_depth)));
+    return std::pow(decay_, depth_bucket_stride_ *
+                                static_cast<double>(clipped_depth - 1));
   }
 
   std::size_t HeatToBucket(double heat) const {
     if (heat <= 1e-12 || max_score_ == 0) {
       return 0;
     }
-    const double ratio = reference_heat_ / std::max(heat, 1e-12);
-    const double tier_delta =
-        std::log(ratio) / std::log(1.0 / std::max(decay_, 1e-9));
+    const double tier =
+        std::log(std::max(heat, 1e-12) / minimum_heat_) /
+        std::log(1.0 / std::max(decay_, 1e-9));
     return static_cast<std::size_t>(std::clamp(
-        static_cast<long long>(
-            std::llround(static_cast<double>(max_score_) - tier_delta)),
+        static_cast<long long>(std::llround(tier)),
         0LL, static_cast<long long>(max_score_)));
   }
 
@@ -687,12 +727,14 @@ class LSBTdiscrete {
   std::size_t max_score_ = 0;
   std::size_t bucket_bitmap_words_ = 0;
   double decay_ = kDefaultHistoryRetention;
+  double depth_bucket_stride_ = 0.0;
   double gain_scale_ = kDefaultGainScale;
   double reference_gain_scale_ = kDefaultGainScale;
   double reward_window_capacity_ratio_ = 0.0;
   double repeat_hit_gain_scale_ = 0.25;
   bool first_touch_per_block_ = true;
   double reference_heat_ = 1.0;
+  double minimum_heat_ = 1.0;
   int rescue_limit_ = -1;
   int protect_scan_budget_ = 16;
   bool rotate_protected_candidates_ = true;
