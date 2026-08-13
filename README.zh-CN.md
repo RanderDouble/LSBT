@@ -21,9 +21,13 @@ PRD 依据复用证据（reuse evidence）对条目进行分类。新条目通�
 | `code/lease_sweep_runner.cpp` | 租约敏感性 runner。 |
 | `code/s3_audit_runner.cpp` | S3FIFO Main 淘汰/重访审计 runner。 |
 | `code/synthetic_lease_runner.cpp` | 合成租约压力测试。 |
-| `scripts/` | 构建、扫描、审计和绘图脚本（PowerShell 与 bash 两个版本）。 |
+| `scripts/` | 构建、扫描、审计、抓取和绘图脚本（PowerShell 与 bash 两个版本）。 |
+| `tools/get_trace.py` | 从 AWS 公共区块链数据集抓取以太坊 trace 切片。 |
+| `tools/convert_to_lsbt.py` | 将原始以太坊交易 CSV 转换为 LSBT block CSV 格式。 |
+| `tools/twitter_bin_to_block.cpp` | 将 OSDI'20 Twitter 二进制 trace 转换为 block CSV 格式。 |
+| `tools/download_range.py` | 面向慢速 HTTP 镜像的并行分段下载器。 |
 | `tools/hierarchy_trace_convert.cpp` | 将 Raw/LSBT/Twitter/CloudPhysics CSV 输入转换为固定 64 字节逻辑节点 CSV。 |
-| `workload/` | 本地小规模 workload 目录，供 block 脚本使用；trace 数据不随仓库捆绑。 |
+| `workload/` | 本地 workload 目录，供 block 脚本使用。 |
 | `results/README.md` | 结果目录约定。生成的输出文件按 `.gitignore` 有意不入库。 |
 
 只有源代码和脚本纳入版本控制。trace 数据、生成的 CSV/图片以及可执行文件都是本地产物，已被 `.gitignore` 排除。
@@ -72,6 +76,22 @@ python scripts/plot_adaptive_lease_full.py
 
 - shell 脚本与 PowerShell 版本依赖相同的外部目录布局：原始以太坊 trace 位于本仓库向上两级目录的相邻位置（`run_evidence_fair_ablation_full.sh` 和 `run_s3_turnover_audit_full.sh` 使用），单独构建的 libCacheSim 树位于向上三级目录（libcachesim 脚本使用）。
 - `run_experiments.sh` 直接调用当前的 `runner` 接口。PowerShell 原版传入了 `--algorithm both`，而当前 `runner.cpp` 已不再接受该参数，因此 shell 版本省略了它。
+
+## 扩展数据集实验
+
+`test` 分支增加了两类数据扩展：
+
+1. **更多以太坊 2024 切片。** `./scripts/fetch_ethereum_expand.sh` 从 AWS 公共区块链数据集（`s3://aws-public-blockchain/v1.0/eth/traces/`）抓取更多日期并转换为与 `workload/lsbt_ethereum_2024/` 相同的布局。新增 4 个日期（2024-02-15、2024-06-20、2024-08-15、2024-10-15），每个日期 5 个 5 万行窗口（`0w_5w` … `20w_25w`），workload 从 27 个切片扩展到 47 个。`workload/manifest.csv` 记录了每个切片的大小与 SHA-256。
+2. **S3FIFO 论文使用的 Twitter（OSDI'20）sample100 集群：**
+
+   ```bash
+   ./scripts/fetch_twitter.sh          # 集群 12 24 47 48 52（gitignored）
+   ./scripts/prepare_twitter.sh        # 解压并转换为 block CSV
+   ./scripts/run_expanded_ablation.sh  # 在两类 workload 上对比 PRD/LSBT/S3FIFO
+   python scripts/plot_expanded.py     # 命中率图输出到 results/
+   ```
+
+   `prepare_twitter.sh` 默认每个集群保留前 1000 万请求（`--max-requests N`），输出扁平 `version,depth,key` 行（`depth=1`，按时间戳变化生成逻辑版本）。
 
 ## Trace 格式
 

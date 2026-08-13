@@ -10,6 +10,11 @@
 /s3_audit_runner
 /lease_sweep_runner
 tools/hierarchy_trace_convert
+tools/twitter_bin_to_block
+
+# Large local dataset artifacts (OSDI'20 Twitter samples; regenerable)
+workload/twitter_osdi20/raw/
+workload/twitter_osdi20/csv/
 
 # Editor and Python cache files
 .vscode/

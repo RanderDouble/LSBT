@@ -29,9 +29,13 @@ capacity; it is not a version or epoch length.
 | `code/lease_sweep_runner.cpp` | Lease sensitivity runner. |
 | `code/s3_audit_runner.cpp` | S3FIFO Main eviction/reaccess audit runner. |
 | `code/synthetic_lease_runner.cpp` | Synthetic lease stress test. |
-| `scripts/` | Build, sweep, audit, and plotting scripts (PowerShell and bash variants). |
+| `scripts/` | Build, sweep, audit, fetch, and plotting scripts (PowerShell and bash variants). |
+| `tools/get_trace.py` | Fetches Ethereum trace slices from the AWS Public Blockchain dataset. |
+| `tools/convert_to_lsbt.py` | Converts raw Ethereum transaction CSV into the LSBT block CSV format. |
+| `tools/twitter_bin_to_block.cpp` | Converts OSDI'20 Twitter binary traces to the block CSV format. |
+| `tools/download_range.py` | Parallel range downloader for slow HTTP mirrors. |
 | `tools/hierarchy_trace_convert.cpp` | Converts Raw/LSBT/Twitter/CloudPhysics CSV inputs to fixed-64B logical-node CSV. |
-| `workload/` | Small local workload location used by block scripts; traces are not bundled. |
+| `workload/` | Local workload location used by block scripts. |
 | `results/README.md` | Result-directory convention. Generated outputs are intentionally ignored by Git. |
 
 Only source code and scripts belong in version control. Trace data, generated
@@ -92,6 +96,30 @@ Notes:
 - `run_experiments.sh` invokes the current `runner` interface directly. The
   PowerShell original passes `--algorithm both`, which the current
   `runner.cpp` no longer accepts, so the shell version omits that flag.
+
+## Expanded dataset experiments
+
+The `test` branch adds two dataset expansions:
+
+1. **More Ethereum 2024 slices.** `./scripts/fetch_ethereum_expand.sh` fetches
+   additional dates from the AWS Public Blockchain dataset
+   (`s3://aws-public-blockchain/v1.0/eth/traces/`) and converts them into the
+   same `workload/lsbt_ethereum_2024/` layout. Four new dates were added
+   (2024-02-15, 2024-06-20, 2024-08-15, 2024-10-15), each with five 50k-row
+   windows (`0w_5w` ... `20w_25w`), bringing the workload from 27 to 47
+   slices. `workload/manifest.csv` records size and SHA-256 for every slice.
+2. **Twitter (OSDI'20) sample100 clusters** used by the S3FIFO paper:
+
+   ```bash
+   ./scripts/fetch_twitter.sh          # clusters 12 24 47 48 52 (gitignored)
+   ./scripts/prepare_twitter.sh        # decompress + convert to block CSV
+   ./scripts/run_expanded_ablation.sh  # PRD vs LSBT vs S3FIFO on both workloads
+   python scripts/plot_expanded.py     # hit-ratio figure into results/
+   ```
+
+   `prepare_twitter.sh` keeps the first 10 million requests per cluster by
+   default (`--max-requests N`) and emits flat `version,depth,key` rows
+   (`depth=1`, logical version per timestamp change).
 
 ## Trace formats
 

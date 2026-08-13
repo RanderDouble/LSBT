@@ -111,7 +111,7 @@ run_raw() {
   local dir="$workspace_root/raw_ethereum_2024"
   local trace ratio case_entry parts row
   while IFS= read -r trace; do
-    echo "raw: $(basename "$trace")"
+    echo "raw: $(basename "$trace")" >&2
     for ratio in "${ratios[@]}"; do
       for case_entry in "${cases[@]}"; do
         IFS='@' read -r -a parts <<<"$case_entry"
@@ -161,7 +161,7 @@ run_block() {
   local dir="$root/workload/lsbt_ethereum_2024"
   local trace ratio case_entry parts row
   while IFS= read -r trace; do
-    echo "block: $(basename "$trace")"
+    echo "block: $(basename "$trace")" >&2
     for ratio in "${ratios[@]}"; do
       for case_entry in "${cases[@]}"; do
         IFS='@' read -r -a parts <<<"$case_entry"
