@@ -27,7 +27,7 @@ capacity; it is not a version or epoch length.
 | `code/lease_sweep_runner.cpp` | Lease sensitivity runner. |
 | `code/s3_audit_runner.cpp` | S3FIFO Main eviction/reaccess audit runner. |
 | `code/synthetic_lease_runner.cpp` | Synthetic lease stress test. |
-| `scripts/` | Build, sweep, audit, and plotting scripts. |
+| `scripts/` | Build, sweep, audit, and plotting scripts (PowerShell and bash variants). |
 | `tools/hierarchy_trace_convert.cpp` | Converts Raw/LSBT/Twitter/CloudPhysics CSV inputs to fixed-64B logical-node CSV. |
 | `workload/` | Small local workload location used by block scripts; traces are not bundled. |
 | `results/README.md` | Result-directory convention. Generated outputs are intentionally ignored by Git. |
@@ -43,6 +43,53 @@ CSV/figures, and executable files are local artifacts and are excluded by
 - Python 3 with `pandas` and `matplotlib` for plotting scripts.
 
 The default build scripts emit executables in the repository root.
+
+On Linux/macOS the same workflow is available as a bash translation of every
+PowerShell script (`scripts/*.sh`). The shell scripts require bash 4+, use the
+same `g++` toolchain, and build extension-less executables in the repository
+root (`runner`, `ablation_runner`, ...).
+
+## Shell usage (Linux/macOS)
+
+Each PowerShell script has a bash counterpart with the same base name. Flags
+use `--` instead of `-` and binaries are built without the `.exe` suffix:
+
+```bash
+./scripts/build.sh                    # release; or build.sh debug
+./scripts/build_ablation.sh           # builds both ablation runners + self-tests
+./scripts/build_s3_audit.sh
+
+./runner --trace workload/lsbt_ethereum_2024/lsbt_2024-01-01_0w_5w.csv --capacity-ratio 0.01
+./runner --trace workload/lsbt_ethereum_2024/lsbt_2024-01-01_0w_5w.csv --cache-size 10000
+
+./scripts/run_evidence_fair_ablation_full.sh --quick
+./scripts/run_evidence_fair_ablation_full.sh --adaptive-only
+./scripts/run_evidence_fair_ablation_full.sh --s3-adaptive-only
+./scripts/run_evidence_fair_ablation_full.sh --cold-ablation-only
+
+./scripts/run_experiments.sh --workload-dir DIR --ratios 0.01,0.05,0.10,0.20 --output results/raw.csv
+./scripts/run_lease_sweep.sh [TRACE.csv]
+./scripts/run_granularity_sweep.sh [TRACE.csv]
+./scripts/run_s3_main_cycle_audit.sh [TRACE.csv]
+./scripts/run_s3_turnover_audit_full.sh --quick
+./scripts/summarize.sh --input results/raw.csv --output results/summary.csv
+
+python scripts/plot_prd_lsbt_s3_full.py
+python scripts/plot_adaptive_lease_full.py
+```
+
+The plotting scripts are Python and run unchanged.
+
+Notes:
+
+- The shell scripts expect the same external layout as the PowerShell
+  versions: raw Ethereum traces adjacent two directories above this
+  repository (used by `run_evidence_fair_ablation_full.sh` and
+  `run_s3_turnover_audit_full.sh`), and a separately built libCacheSim tree
+  three directories above it (libcachesim scripts).
+- `run_experiments.sh` invokes the current `runner` interface directly. The
+  PowerShell original passes `--algorithm both`, which the current
+  `runner.cpp` no longer accepts, so the shell version omits that flag.
 
 ## Trace formats
 

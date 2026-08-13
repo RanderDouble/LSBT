@@ -3,6 +3,14 @@
 *.o
 *.obj
 
+# Shell (Linux) build outputs
+/runner
+/ablation_runner
+/ablation_path_runner
+/s3_audit_runner
+/lease_sweep_runner
+tools/hierarchy_trace_convert
+
 # Editor and Python cache files
 .vscode/
 __pycache__/
