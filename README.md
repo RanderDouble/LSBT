@@ -1,5 +1,7 @@
 # PRD Cache Replacement
 
+> 中文版：[README.zh-CN.md](README.zh-CN.md)
+
 This repository contains the PRD cache policy, LSBT baselines, an S3FIFO
 baseline, and the runners used for controlled comparisons on versioned
 Ethereum-derived traces.
