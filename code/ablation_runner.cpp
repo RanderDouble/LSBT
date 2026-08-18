@@ -82,7 +82,11 @@ class TwoTimescaleAdapter {
       : cache_(key_count, capacity, max_depth, retention) {}
 
   bool Access(std::uint32_t key, int depth) {
-    const bool hit = cache_.Access(key, depth, true);
+    // Block traces are version-deduplicated, so first-touch Micro admission
+    // only wastes Macro capacity (measured: 0.139 -> 0.062 on an Ethereum
+    // slice at 1%). Keep Micro for genuine intra-epoch repeats only, which
+    // is the productive case (partner guidance: block -> Macro-only).
+    const bool hit = cache_.Access(key, depth, false);
     cache_.EndMicroUnit();  // fine-grained clock: tick once per request
     return hit;
   }
