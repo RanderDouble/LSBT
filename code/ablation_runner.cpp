@@ -4,6 +4,7 @@
 #include "PRD.hpp"
 #include "PRDAblations.hpp"
 #include "S3FifoBaseline.hpp"
+#include "two_timescale/TwoTimescaleCacheSparse.hpp"
 
 #include <chrono>
 #include <cmath>
@@ -68,9 +69,39 @@ class LRUCache {
   Counters counters_;
 };
 
+// Two-timescale cache (partner engineering v3): Macro (cross-version
+// persistence) and Micro (within-version reuse) retention domains share one
+// strict capacity budget. Access performs admission internally, so the runner
+// interface maps onto Access/EndMicroUnit/EndEpoch.
+class TwoTimescaleAdapter {
+ public:
+  struct Counters { std::uint64_t evictions = 0; };
+
+  TwoTimescaleAdapter(std::size_t key_count, std::size_t capacity,
+                      int max_depth, double retention)
+      : cache_(key_count, capacity, max_depth, retention) {}
+
+  bool Access(std::uint32_t key, int depth) {
+    const bool hit = cache_.Access(key, depth, true);
+    cache_.EndMicroUnit();  // fine-grained clock: tick once per request
+    return hit;
+  }
+
+  bool Admit(std::uint32_t, int) { return true; }  // admission inside Access
+
+  void FinishBlock() { cache_.EndEpoch(); }
+
+  const Counters& counters() const { return counters_; }
+  const auto& stats() const { return cache_.stats(); }
+
+ private:
+  TwoTimescaleCacheSparse cache_;
+  Counters counters_;
+};
+
 void Usage(const char* p) {
   std::cerr << "Usage: " << p << " --trace PATH (--cache-size N | --capacity-ratio R)\n"
-            << "  [--algorithm PRD|LSBTSimple|LSBTdiscrete|LSBTconsecutive|S3FIFO|S3FIFOGhost8|LRU"
+            << "  [--algorithm PRD|LSBTSimple|TwoTimescale|LSBTdiscrete|LSBTconsecutive|S3FIFO|S3FIFOGhost8|LRU"
             << "|PRDAdaptiveGhost|PRDAdaptiveLease|PRDNullDepth|PRDPureDepth|PRDColdFifo"
             << "|S3FIFOAdaptiveGhost|S3FIFOAdaptiveLease|S3FIFOAdaptiveGhostLease|S3FIFOMainCycleAudit]\n";
 }
@@ -141,6 +172,7 @@ int main(int argc, char** argv) { try { const Options o=Parse(argc,argv); if(o.s
   else if(o.algorithm=="S3FIFOMainCycleAudit") Print("S3FIFOMainCycleAudit",c,ReplayS3(t,c,8,false,false,true));
   else if(o.algorithm=="LSBTSimple"){LSBTSimple x(t.keys,c,o.max_depth,o.retention);Print("LSBTSimple",c,Replay(t,x));}
   else if(o.algorithm=="LRU"){LRUCache x(t.keys,c,o.max_depth,o.retention);Print("LRU",c,Replay(t,x));}
+  else if(o.algorithm=="TwoTimescale"){TwoTimescaleAdapter x(t.keys,c,o.max_depth,o.retention);Print("TwoTimescale",c,Replay(t,x));}
   else throw std::runtime_error("unsupported algorithm");
   return 0;
  } catch(const std::exception& e){std::cerr<<"error: "<<e.what()<<'\n';Usage(argv[0]);return 1;} }

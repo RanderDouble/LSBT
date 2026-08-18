@@ -18,6 +18,7 @@ PRD 依据复用证据（reuse evidence）对条目进行分类。新条目通�
 | `code/LSBTState.hpp` | 简化版 LSBT 共用的状态表与辅助函数。 |
 | `code/LSBTGhostFIFO.hpp` | 简化版 LSBT 使用的幽灵 FIFO 队列。 |
 | `code/LSBTTimingWheel.hpp` | 简化版 LSBT 使用的定时轮。 |
+| `code/two_timescale/` | 伙伴的双时间尺度缓存 v3 包（Macro/Micro 分层；见其 README）。 |
 | `code/S3FifoBaseline.hpp` | S3FIFO 基线及受控扩展/审计钩子。 |
 | `code/PRDAblations.hpp` | 仅用于消融实验的具名 PRD 配置。 |
 | `code/ablation_runner.cpp` | Block trace 对比 runner。 |

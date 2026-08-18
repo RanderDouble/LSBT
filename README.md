@@ -26,6 +26,7 @@ capacity; it is not a version or epoch length.
 | `code/LSBTState.hpp` | Shared state table and helpers for the simplified LSBT. |
 | `code/LSBTGhostFIFO.hpp` | Ghost FIFO queue used by the simplified LSBT. |
 | `code/LSBTTimingWheel.hpp` | Timing wheel used by the simplified LSBT. |
+| `code/two_timescale/` | Partner two-timescale cache v3 package (Macro/Micro tiers; see its README). |
 | `code/S3FifoBaseline.hpp` | S3FIFO baseline and controlled extensions/audit hooks. |
 | `code/PRDAblations.hpp` | Named PRD configurations used only by ablations. |
 | `code/ablation_runner.cpp` | Block-trace comparison runner. |

@@ -26,6 +26,7 @@ FIGURES = RESULTS / "figures"
 POLICIES = {
     "PRD": ("PRD", "#1b9e77", "o"),
     "LSBTSimple": ("LSBT-Simple", "#e45756", "D"),
+    "TwoTimescale": ("Two-Timescale", "#6a3d9a", "*"),
     "LSBT-discrete": ("LSBT discrete", "#79706e", "X"),
     "LSBT-consecutive": ("LSBT consecutive", "#f58518", "s"),
     "S3FIFO-g09": ("S3FIFO (0.9C ghost)", "#9c755f", "v"),

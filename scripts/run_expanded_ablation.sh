@@ -41,6 +41,7 @@ cases=(
   "LSBT-consecutive@--algorithm@LSBTconsecutive"
   "PRD@--algorithm@PRD"
   "LSBTSimple@--algorithm@LSBTSimple"
+  "TwoTimescale@--algorithm@TwoTimescale"
   "LRU@--algorithm@LRU"
 )
 
