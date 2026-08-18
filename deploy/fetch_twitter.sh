@@ -10,6 +10,8 @@ set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RAW_DIR="$DIR/workloads/twitter/raw"
 CSV_DIR="$DIR/workloads/twitter/csv"
+PYBIN="$DIR/.venv/bin/python"
+[[ -x "$PYBIN" ]] || PYBIN="$(command -v python3)"
 
 # --- config ---
 CLUSTERS=(12 24 47 48 52)
@@ -40,7 +42,7 @@ for c in "${CLUSTERS[@]}"; do
     while ! zstd -t "$zst" >/dev/null 2>&1; do
       attempt=$((attempt + 1))
       if (( attempt > 25 )); then echo "download failed: $file" >&2; exit 1; fi
-      python3 "$DIR/tools/download_range.py" \
+      "$PYBIN" "$DIR/tools/download_range.py" \
         --url "$BASE_URL/$file" --output "$zst.part" \
         --size "$size" --connections "$CONNECTIONS" || true
       if zstd -t "$zst.part" >/dev/null 2>&1; then mv "$zst.part" "$zst"; fi

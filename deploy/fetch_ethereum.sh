@@ -11,6 +11,8 @@ set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RAW_DIR="$DIR/workloads/ethereum/raw"
 BLOCK_DIR="$DIR/workloads/ethereum/block"
+PYBIN="$DIR/.venv/bin/python"
+[[ -x "$PYBIN" ]] || PYBIN="$(command -v python3)"
 
 # --- config ---
 DATES=(2024-02-15 2024-06-20 2024-08-15 2024-10-15)
@@ -26,7 +28,7 @@ mkdir -p "$RAW_DIR" "$BLOCK_DIR"
 for date in "${DATES[@]}"; do
   raw="$(mktemp /tmp/eth_raw_${date}_XXXXXX.csv)"
   echo "==> fetching $date (${#WINDOWS[@]} windows x ${ROWS_PER_WINDOW} rows)"
-  python3 "$DIR/tools/get_trace.py" --date "$date" --start-row 0 \
+  "$PYBIN" "$DIR/tools/get_trace.py" --date "$date" --start-row 0 \
     --row-count $((${#WINDOWS[@]} * ROWS_PER_WINDOW)) --output "$raw"
 
   total_rows=$(($(wc -l < "$raw") - 1))
@@ -42,7 +44,7 @@ for date in "${DATES[@]}"; do
     window_csv="$(mktemp /tmp/eth_win_${date}_${start_w}w_XXXXXX.csv)"
     { head -n 1 "$raw"; sed -n "${from_line},${to_line}p" "$raw"; } > "$window_csv"
     out="$BLOCK_DIR/lsbt_${date}_${start_w}w_${end_w}w.csv"
-    python3 "$DIR/tools/convert_to_lsbt.py" --input "$window_csv" --output "$out"
+    "$PYBIN" "$DIR/tools/convert_to_lsbt.py" --input "$window_csv" --output "$out"
     rm -f "$window_csv"
   done
   mv "$raw" "$RAW_DIR/trace_${date}.csv"

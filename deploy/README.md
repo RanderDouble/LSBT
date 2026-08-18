@@ -16,8 +16,13 @@
 ./fetch_ethereum.sh                 # 抓取以太坊 2024 切片并转 block CSV
 ./fetch_twitter.sh                  # 下载 5 个 Twitter 集群并转 block CSV
 ./run_ablation.sh                   # 跑 8 策略对比（约 1 小时，可 --quick）
-python3 plot.py                     # 每样例一张图 + 汇总图
+./.venv/bin/python plot.py          # 每样例一张图 + 汇总图（setup 后）
 ```
+
+> 若系统 Python 是 PEP 668 外部管理（Debian/Ubuntu 常见），`setup.sh` 会自动创建
+> `.venv` 虚拟环境并安装依赖；绘图请用 `./.venv/bin/python plot.py`。若虚拟环境
+> 创建失败，`setup.sh` 会回退到 `pip --break-system-packages`（此时绘图用
+> `python3 plot.py`）。
 
 ## 配置
 
