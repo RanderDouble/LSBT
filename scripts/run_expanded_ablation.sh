@@ -40,6 +40,8 @@ cases=(
   "LSBT-discrete@--algorithm@LSBTdiscrete"
   "LSBT-consecutive@--algorithm@LSBTconsecutive"
   "PRD@--algorithm@PRD"
+  "LSBTSimple@--algorithm@LSBTSimple"
+  "LRU@--algorithm@LRU"
 )
 
 csv_header='workload,trace,algorithm,capacity_ratio,capacity,requests,hits,misses,hit_ratio,elapsed_ms'

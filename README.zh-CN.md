@@ -14,6 +14,10 @@ PRD 依据复用证据（reuse evidence）对条目进行分类。新条目通�
 | `code/runner.cpp` | 主 PRD 策略的最小 runner。 |
 | `code/LSBTdiscrete.hpp` | 分桶/离散版 LSBT 基线。 |
 | `code/LSBTconsecutive.hpp` | 连续版 LSBT 基线。 |
+| `code/LSBTSimple.hpp` | 简化版 LSBT 实现（伙伴版本），基于 timing wheel + ghost FIFO。 |
+| `code/LSBTState.hpp` | 简化版 LSBT 共用的状态表与辅助函数。 |
+| `code/LSBTGhostFIFO.hpp` | 简化版 LSBT 使用的幽灵 FIFO 队列。 |
+| `code/LSBTTimingWheel.hpp` | 简化版 LSBT 使用的定时轮。 |
 | `code/S3FifoBaseline.hpp` | S3FIFO 基线及受控扩展/审计钩子。 |
 | `code/PRDAblations.hpp` | 仅用于消融实验的具名 PRD 配置。 |
 | `code/ablation_runner.cpp` | Block trace 对比 runner。 |

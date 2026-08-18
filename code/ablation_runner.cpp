@@ -1,5 +1,6 @@
 #include "LSBTconsecutive.hpp"
 #include "LSBTdiscrete.hpp"
+#include "LSBTSimple.hpp"
 #include "PRD.hpp"
 #include "PRDAblations.hpp"
 #include "S3FifoBaseline.hpp"
@@ -10,6 +11,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <list>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
@@ -24,9 +26,53 @@ struct Stats { std::uint64_t requests = 0, hits = 0, misses = 0, evictions = 0;
   std::uint64_t s3_main_evictions = 0, s3_main_eviction_reaccesses = 0,
       s3_main_eviction_requalifications = 0; double elapsed_ms = 0.0; };
 
+// Classic LRU baseline (published textbook algorithm).
+class LRUCache {
+ public:
+  struct Counters { std::uint64_t evictions = 0; };
+
+  LRUCache(std::size_t, std::size_t capacity, int, double) : capacity_(capacity) {}
+
+  bool Access(std::uint32_t key, int) {
+    auto it = map_.find(key);
+    if (it == map_.end()) return false;
+    order_.splice(order_.begin(), order_, it->second);
+    return true;
+  }
+
+  bool Admit(std::uint32_t key, int) {
+    if (capacity_ == 0) return false;
+    auto it = map_.find(key);
+    if (it != map_.end()) {
+      order_.splice(order_.begin(), order_, it->second);
+      return true;
+    }
+    if (order_.size() >= capacity_) {
+      const std::uint32_t victim = order_.back();
+      order_.pop_back();
+      map_.erase(victim);
+      ++counters_.evictions;
+    }
+    order_.push_front(key);
+    map_[key] = order_.begin();
+    return true;
+  }
+
+  void FinishBlock() {}
+  const Counters& counters() const { return counters_; }
+
+ private:
+  std::size_t capacity_ = 0;
+  std::list<std::uint32_t> order_;
+  std::unordered_map<std::uint32_t, std::list<std::uint32_t>::iterator> map_;
+  Counters counters_;
+};
+
 void Usage(const char* p) {
   std::cerr << "Usage: " << p << " --trace PATH (--cache-size N | --capacity-ratio R)\n"
-            << "  [--algorithm PRD|PRDAdaptiveGhost|PRDAdaptiveLease|PRDNullDepth|PRDPureDepth|PRDColdFifo|LSBTdiscrete|LSBTconsecutive|S3FIFO|S3FIFOGhost8|S3FIFOAdaptiveGhost|S3FIFOAdaptiveLease|S3FIFOAdaptiveGhostLease|S3FIFOMainCycleAudit]\n";
+            << "  [--algorithm PRD|LSBTSimple|LSBTdiscrete|LSBTconsecutive|S3FIFO|S3FIFOGhost8|LRU"
+            << "|PRDAdaptiveGhost|PRDAdaptiveLease|PRDNullDepth|PRDPureDepth|PRDColdFifo"
+            << "|S3FIFOAdaptiveGhost|S3FIFOAdaptiveLease|S3FIFOAdaptiveGhostLease|S3FIFOMainCycleAudit]\n";
 }
 Options Parse(int argc, char** argv) {
   Options o;
@@ -93,6 +139,8 @@ int main(int argc, char** argv) { try { const Options o=Parse(argc,argv); if(o.s
   else if(o.algorithm=="S3FIFOAdaptiveLease") Print("S3FIFOAdaptiveLease",c,ReplayS3(t,c,8,false,true,false));
   else if(o.algorithm=="S3FIFOAdaptiveGhostLease") Print("S3FIFOAdaptiveGhostLease",c,ReplayS3(t,c,8,true,true,false));
   else if(o.algorithm=="S3FIFOMainCycleAudit") Print("S3FIFOMainCycleAudit",c,ReplayS3(t,c,8,false,false,true));
+  else if(o.algorithm=="LSBTSimple"){LSBTSimple x(t.keys,c,o.max_depth,o.retention);Print("LSBTSimple",c,Replay(t,x));}
+  else if(o.algorithm=="LRU"){LRUCache x(t.keys,c,o.max_depth,o.retention);Print("LRU",c,Replay(t,x));}
   else throw std::runtime_error("unsupported algorithm");
   return 0;
  } catch(const std::exception& e){std::cerr<<"error: "<<e.what()<<'\n';Usage(argv[0]);return 1;} }
