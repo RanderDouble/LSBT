@@ -10,20 +10,18 @@ command -v g++ >/dev/null || { echo "ERROR: g++ (C++17) required" >&2; exit 1; }
 command -v zstd >/dev/null || echo "WARN: zstd not found; twitter download/convert will fail"
 
 # Python deps: prefer an isolated venv; on PEP 668 externally-managed systems
-# fall back to --break-system-packages (use a venv if you can).
+# fall back to --break-system-packages. pip runs exactly once.
 PYBIN="$DIR/.venv/bin/python"
-if [[ ! -x "$PYBIN" ]]; then
-  if python3 -m venv "$DIR/.venv" 2>/dev/null; then
-    echo "created virtualenv: $DIR/.venv"
-  else
-    echo "WARN: python3 -m venv failed (try: apt install python3-venv python3-full)" >&2
-    echo "WARN: installing with --break-system-packages" >&2
-    python3 -m pip install --break-system-packages -r "$DIR/requirements.txt"
-    PYBIN="$(command -v python3)"
-  fi
-fi
 if [[ -x "$PYBIN" ]]; then
+  echo "using existing virtualenv: $DIR/.venv"
   "$PYBIN" -m pip install -r "$DIR/requirements.txt"
+elif python3 -m venv "$DIR/.venv" 2>/dev/null && [[ -x "$PYBIN" ]]; then
+  echo "created virtualenv: $DIR/.venv"
+  "$PYBIN" -m pip install -r "$DIR/requirements.txt"
+else
+  echo "WARN: python3 -m venv failed (recommend: apt install python3-venv python3-full)" >&2
+  echo "WARN: falling back to pip --break-system-packages" >&2
+  python3 -m pip install --break-system-packages -r "$DIR/requirements.txt"
 fi
 
 g++ -std=c++17 -O3 -DNDEBUG -Wall -Wextra -pedantic \
