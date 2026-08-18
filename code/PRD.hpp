@@ -115,13 +115,19 @@ class PRDCore {
       if (!s.in_ghost) states_.erase(it);
       return false;
     }
-    const bool full = unified_capacity_ ? ResidentSize() >= capacity_
-                                        : (s.promote_hot_on_admit
-                                               ? hot_size_ >= hot_capacity_
-                                               : cold_size_ >= cold_capacity_);
-    if (full && !(EvictCold() || EvictHot())) {
-      if (!s.in_ghost) states_.erase(it);
-      return false;
+    const bool full = unified_capacity_
+                          ? ResidentSize() >= capacity_
+                          : (ResidentSize() >= capacity_ ||
+                             (s.promote_hot_on_admit
+                                  ? hot_size_ >= hot_capacity_
+                                  : cold_size_ >= cold_capacity_));
+    if (full) {
+      const bool evicted = s.promote_hot_on_admit ? (EvictHot() || EvictCold())
+                                                  : (EvictCold() || EvictHot());
+      if (!evicted) {
+        if (!s.in_ghost) states_.erase(it);
+        return false;
+      }
     }
     s.place = s.promote_hot_on_admit ? Place::kHotActive : Place::kCold;
     s.promote_hot_on_admit = false;
@@ -175,6 +181,10 @@ class PRDCore {
     return adaptive_lease_ ? adaptive_lease_factor_ : turnover_factor_;
   }
   std::size_t resident_size() const noexcept { return ResidentSize(); }
+  std::size_t cold_size() const noexcept { return cold_size_; }
+  std::size_t hot_size() const noexcept { return hot_size_; }
+  std::size_t cold_capacity() const noexcept { return cold_capacity_; }
+  std::size_t hot_capacity() const noexcept { return hot_capacity_; }
   bool Contains(std::uint32_t key) const noexcept {
     const auto it = states_.find(key);
     return it != states_.end() && it->second.place != Place::kNone;

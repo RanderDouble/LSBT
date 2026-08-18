@@ -14,6 +14,8 @@ The `test` branch adds an expanded experiment over 52 traces:
 - `expanded_ablation_full.csv`: one row per (trace, capacity ratio, policy) for
   the 47 Ethereum block slices and 5 Twitter (OSDI'20) clusters, comparing
   PRD, LSBTSimple, LSBT discrete/consecutive, S3FIFO (0.9C/8C ghost), and LRU.
+  PRD rows use the capacity-fixed implementation (2026-08-18); see
+  `expanded_summary.md` for the fix note.
 - `expanded_hit_ratio.png`: request-weighted hit-ratio curves per workload.
 - `expanded_summary.md`: aggregate hit ratios by workload and policy.
 - `figures/`: one figure per sample — `ethereum_<date>.png` for each of the 13
