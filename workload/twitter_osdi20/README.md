@@ -31,3 +31,10 @@ increments whenever the raw timestamp changes.
 
 Raw archives and converted CSVs are large and gitignored; only this README,
 the fetch/prepare scripts, and the result summaries are version-controlled.
+
+The `raw/` and `csv/` entries here are symlinks to
+`../../../../SRTP-data/twitter_osdi20/`, which sits next to this repository on
+the same filesystem. `fetch_twitter.sh` and `prepare_twitter.sh` write through
+these links, so their paths need no change. The `.bin` files under `raw/` are
+decompressed copies of the `.zst` archives and can be recreated with
+`unzstd -k raw/*.zst`.

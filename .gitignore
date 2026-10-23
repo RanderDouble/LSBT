@@ -12,9 +12,11 @@
 tools/hierarchy_trace_convert
 tools/twitter_bin_to_block
 
-# Large local dataset artifacts (OSDI'20 Twitter samples; regenerable)
-workload/twitter_osdi20/raw/
-workload/twitter_osdi20/csv/
+# Large local dataset artifacts (OSDI'20 Twitter samples; regenerable).
+# These paths are now symlinks into ../SRTP-data, so the patterns have no
+# trailing slash.
+workload/twitter_osdi20/raw
+workload/twitter_osdi20/csv
 
 # Editor and Python cache files
 .vscode/
