@@ -35,6 +35,7 @@ capacity; it is not a version or epoch length.
 | `code/s3_audit_runner.cpp` | S3FIFO Main eviction/reaccess audit runner. |
 | `code/synthetic_lease_runner.cpp` | Synthetic lease stress test. |
 | `scripts/` | Build, sweep, audit, fetch, and plotting scripts (PowerShell and bash variants). |
+| `docs/lsbt_math.md` | Strict mathematical description of the LSBT implementation logic (Chinese). |
 | `tools/get_trace.py` | Fetches Ethereum trace slices from the AWS Public Blockchain dataset. |
 | `tools/convert_to_lsbt.py` | Converts raw Ethereum transaction CSV into the LSBT block CSV format. |
 | `tools/twitter_bin_to_block.cpp` | Converts OSDI'20 Twitter binary traces to the block CSV format. |
